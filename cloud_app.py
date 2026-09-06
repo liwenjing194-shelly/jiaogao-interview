@@ -64,7 +64,7 @@ def create_app(settings=None):
     @app.after_request
     def headers(response):
         response.headers.update({'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
-            'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
+            'X-Frame-Options': 'DENY', 'Referrer-Policy': 'same-origin',
             'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
         return response
 
