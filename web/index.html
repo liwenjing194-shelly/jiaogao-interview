@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="review-token" content="__REVIEW_TOKEN__">
+  <title>校稿 · 广告合规工作台</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a href="#main" class="skip-link">跳到主要内容</a>
+  <aside class="sidebar">
+    <div class="brand"><img src="/favicon.svg" alt="" width="36" height="36"><div><strong>校稿</strong><span>广告合规工作台</span></div></div>
+    <div class="nav-label">工作空间</div>
+    <nav aria-label="主导航">
+      <button class="nav-item active" data-view="review" aria-current="page"><span aria-hidden="true">▤</span>材料检查</button>
+      <button class="nav-item" data-view="history"><span aria-hidden="true">◷</span>检查记录</button>
+      <button class="nav-item" data-view="rules"><span aria-hidden="true">☷</span>规则说明</button>
+    </nav>
+    <div class="sidebar-bottom"><span class="dot"></span>本机工作台<p>先发现问题，再确认发布。</p><small>依据题目 A-01 至 A-10<br>风险事项保留人工判断</small></div>
+  </aside>
+  <main id="main">
+    <header class="topbar"><span>宣传材料 / 发布前检查</span><span id="connection" class="connection">正在连接…</span></header>
+    <section id="view-review" class="view">
+      <div class="page-heading"><div class="eyebrow">CONTENT REVIEW</div><h1>发布之前，再检查一次。</h1><p>把文案或海报放在这里，让每一项风险都有原文、有依据、有下一步。</p></div>
+      <div class="workspace">
+        <section class="panel input-panel" aria-labelledby="input-heading">
+          <div class="panel-heading"><h2 id="input-heading"><span class="step">01</span>提交材料</h2><span class="subtle">一次检查一份</span></div>
+          <form id="review-form">
+            <fieldset id="input-fields">
+              <legend class="sr-only">待检查的宣传材料</legend>
+              <div class="tabs" role="tablist" aria-label="输入方式">
+                <button type="button" id="tab-text" class="tab active" role="tab" aria-selected="true" aria-controls="text-zone" data-mode="text">文字文案</button>
+                <button type="button" id="tab-image" class="tab" role="tab" aria-selected="false" aria-controls="image-zone" data-mode="image">海报 / 截图</button>
+              </div>
+              <div id="text-zone" role="tabpanel" aria-labelledby="tab-text">
+                <label class="field-label" for="ad-text">广告文案</label>
+                <textarea id="ad-text" rows="8" maxlength="30000" placeholder="粘贴商品介绍、朋友圈文案或活动宣传语…"></textarea>
+                <div class="field-note"><span>保留原始表达，方便准确定位问题</span><span id="text-count">0 字</span></div>
+              </div>
+              <div id="image-zone" role="tabpanel" aria-labelledby="tab-image" hidden>
+                <div class="field-label" id="image-heading">宣传图片</div>
+                <input id="image-file" type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png" aria-label="选择宣传图片文件" hidden>
+                <button class="dropzone" id="dropzone" type="button" aria-describedby="image-status"><span class="upload-icon" aria-hidden="true">↑</span><strong>选择图片</strong><span>点击打开文件夹，也可拖入或按 Ctrl+V 粘贴图片</span><span>JPG / PNG · 最大 10 MB</span></button>
+                <div id="preview-box" hidden><img id="image-preview" alt="待检查的宣传图片预览"><div class="preview-caption"><span id="image-name"></span><div class="image-actions"><button type="button" id="change-image" class="secondary-button">更换图片</button><button type="button" id="remove-image" class="text-button">移除图片</button></div></div></div>
+                <p id="image-status" class="image-status" role="status">尚未选择图片。选择后会显示预览，再点击底部“开始检查”。</p>
+                <label class="field-label extra-label" for="image-caption">附带文案 <span class="optional">选填</span></label>
+                <textarea id="image-caption" rows="2" maxlength="30000" placeholder="填写与这张图片一起发布的文字…"></textarea>
+              </div>
+              <div class="examples"><span>先试一份</span><button type="button" data-example="risk">风险文案 ↗</button><button type="button" data-example="normal">商品介绍 ↗</button><button type="button" data-example="image">示例海报 ↗</button></div>
+              <details class="evidence-details"><summary>补充判断依据 <span>选填</span></summary><div class="details-content"><label class="field-label" for="evidence">活动细则、数据来源或授权说明</label><textarea id="evidence" rows="4" maxlength="30000" placeholder="例如活动起止日期、适用渠道、数据统计口径。请填写真实资料。"></textarea><p class="field-note">补充内容用于判断信息是否齐全，真实性仍需人工核验。</p></div></details>
+              <label class="checkbox-row"><input id="incomplete" type="checkbox"><span>这份材料有截断、遮挡或缺少页面</span></label>
+            </fieldset>
+          </form>
+        </section>
+        <section class="panel result-panel" aria-labelledby="result-heading" aria-busy="false">
+          <div class="panel-heading"><h2 id="result-heading"><span class="step">02</span>检查结果</h2><span id="result-label" class="subtle">等待提交</span></div>
+          <div id="empty-result" class="empty-result"><div class="paper-icon" aria-hidden="true"><span></span><span></span><span></span><b>✓</b></div><h3>让修改有据可依</h3><p>提交一份材料，查看需要注意的表达<br>和每条问题对应的整改建议。</p><div class="empty-features"><span>定位风险原文</span><span>匹配 10 条规则</span><span>明确人工复核</span></div></div>
+          <div id="loading-result" class="loading-result" role="status" hidden><div class="spinner"></div><h3>正在检查这份材料</h3><p>识别内容，并按题目规则逐条核对。</p><span id="elapsed">已等待 0 秒</span><small>你可以留在本页等待，无需重复提交。</small></div>
+          <div id="result-content" hidden>
+            <p id="stale-notice" class="notice" hidden>材料已修改。下方仍是上一次检查结果，请重新检查后再使用。</p>
+            <p id="history-notice" class="notice" hidden>正在查看历史记录，未重新调用模型。对当前输入的修改需要重新检查。</p>
+            <div id="summary" class="result-summary"><div><span id="summary-kicker" class="eyebrow">检查完成</span><h3 id="summary-title"></h3><p id="summary-note"></p></div><span id="summary-symbol" aria-hidden="true">!</span></div>
+            <div class="metrics"><div><strong id="issue-count">0</strong><span>待处理问题</span></div><div><strong id="rule-count">10</strong><span>已检查规则</span></div><div><strong id="run-time">—</strong><span>本次耗时 / 秒</span></div></div>
+            <div id="limitations" class="limitations" hidden><strong>尚不能判断的部分</strong><ul id="limitation-list"></ul></div>
+            <div class="section-line"><h3>问题与整改建议</h3><span id="review-required"></span></div>
+            <div id="issues"></div>
+            <section id="optimizations" hidden><div class="section-line"><h3>可选优化建议</h3><span>不计入风险</span></div><div id="optimization-list"></div></section>
+            <details class="result-details"><summary>查看本次材料与识别文字</summary><div id="source-content" class="details-content"></div></details>
+            <details class="result-details"><summary>查看全部 10 条规则的判断</summary><div id="all-checks" class="details-content"></div></details>
+            <div class="report-actions"><button id="download-md" class="secondary-button" type="button">↓ 下载检查报告</button><button id="download-json" class="text-button" type="button">下载 JSON</button></div>
+            <p class="report-note">本次结果仅适用于提交材料与题目规则。风险与证据缺口需由人工确认。</p>
+          </div>
+        </section>
+      </div>
+      <footer class="page-footer"><span>10 条题目规则 · 原文可追溯 · 修改后可复查</span><button type="button" class="text-button" data-go="rules">了解检查边界 ↗</button></footer>
+      <div class="action-bar" aria-label="检查操作">
+        <div id="form-error" class="error-message" role="alert" hidden></div>
+        <div class="action-main">
+          <div class="action-info"><strong id="action-progress" role="status">材料准备好后，点击开始检查</strong><p>免费额度：尚未核实 · <a href="https://bailian.console.aliyun.com/cn-beijing/?tab=costing-balance#/costing-balance/free-quota" target="_blank" rel="noopener noreferrer">查询百炼额度 ↗</a></p><small>通常需要15—40秒；每次检查会使用模型额度</small></div>
+          <button id="submit" class="primary-button" type="submit" form="review-form"><span>开始检查</span><span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </section>
+    <section id="view-history" class="view" hidden><div class="page-heading"><div class="eyebrow">REVIEW HISTORY</div><h1>每次检查，都有记录。</h1><p>查看本机最近 30 份真实结果，打开历史记录不会再次消耗模型额度。</p></div><div id="history-list" class="history-list"></div></section>
+    <section id="view-rules" class="view" hidden><div class="page-heading"><div class="eyebrow">REVIEW GUIDELINES</div><h1>判断从哪里来？</h1><p>每次检查完整使用题目给定的 A-01 至 A-10，以下为规则原文。</p></div><div class="rule-intro"><h2>先理解这三个边界</h2><p>“未发现风险”仅限本次材料与题目规则，不代表已获得发布许可。看不清或缺少证据时明确要求补充；用户提供的来源、授权和效果资料仍需人工核验真实性。</p><p>修改建议采用按规则设置的保守整改要求，不代填活动日期或证明资料。高、中、低、待确认是本项目的分级；所有发现的问题都需人工确认后处理。</p></div><div id="rules-list" class="rules-list"></div><p id="rules-version" class="report-note"></p></section>
+  </main>
+</body>
+</html>
