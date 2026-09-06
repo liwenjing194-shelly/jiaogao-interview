@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: jiaogao-review
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python cloud_app.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.13
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: REVIEW_ACCESS_CODE
+        sync: false
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: REVIEW_MAX_CHECKS
+        value: 50
