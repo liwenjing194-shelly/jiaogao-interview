@@ -15,10 +15,12 @@ function rememberReport(data){
     const item={id:data.id,run:data.run,input:data.input,report:data.report};
     const records=[item,...savedReports().filter(r=>r.id!==data.id)].sort((a,b)=>new Date(b.run.executed_at)-new Date(a.run.executed_at)).slice(0,30);
     localStorage.setItem(HISTORY_KEY,JSON.stringify(records));
-    $('#history-save-status').textContent='已保存到本浏览器的检查记录，服务器更新后仍可查看。';
+    $('#history-save-status').className='report-note';
+    $('#history-save-status').textContent='已保存到本浏览器的检查记录。';
     return true;
   }catch{
-    $('#history-save-status').textContent='本次结果未能保存到浏览器（空间不足或存储被限制）。请立即另存 PDF 或复制报告；已保存的旧记录不会因此被覆盖。';
+    $('#history-save-status').className='report-note save-failed';
+    $('#history-save-status').textContent='本次结果未能保存到浏览器。请立即另存 PDF 或复制报告；可能是存储空间不足或被限制。';
     return false;
   }
 }
@@ -42,7 +44,7 @@ function clearImage(){
   state.imageVersion++;state.loadingImage=false;$('#submit').disabled=state.busy;
   if(state.preview)URL.revokeObjectURL(state.preview);
   state.image=null;state.preview=null;$('#image-file').value='';$('#image-preview').removeAttribute('src');$('#preview-box').hidden=true;$('#dropzone').hidden=false;markStale();
-  $('#image-status').textContent='尚未选择图片。选择后会显示预览，再点击底部“开始检查”。';
+  $('#image-status').textContent='请上传完整、清晰的原图，也支持粘贴图片。';
 }
 function openImagePicker(){
   if(state.busy)return;
@@ -64,7 +66,7 @@ async function selectImage(file){
     state.image=file;state.preview=url;
     $('#image-preview').src=url;$('#image-name').textContent=file.name;
     $('#preview-box').hidden=false;$('#dropzone').hidden=true;showError('');markStale();
-    $('#image-status').textContent=`已选择 ${file.name} · ${probe.naturalWidth} × ${probe.naturalHeight} · ${(file.size/1024/1024).toFixed(2)} MB。点击底部按钮提交检查。`;
+    $('#image-status').textContent=`图片已就绪 · ${probe.naturalWidth} × ${probe.naturalHeight} · ${(file.size/1024/1024).toFixed(2)} MB`;
   }catch(error){
     URL.revokeObjectURL(url);
     if(version===state.imageVersion){showError(error.message);$('#image-status').textContent=state.image?'新图片读取失败，保留之前的图片。':'图片读取失败，请重新选择。';}
@@ -79,6 +81,7 @@ function switchView(view){
   $$('.nav-item').forEach(btn=>{const active=btn.dataset.view===view;btn.classList.toggle('active',active);if(active)btn.setAttribute('aria-current','page');else btn.removeAttribute('aria-current');});
   if(view==='history')loadHistory();
   window.scrollTo({top:0,behavior:'instant'});
+  $('#main').scrollTo({top:0,behavior:'instant'});
 }
 function sourceBlock(parent,label,content){parent.append(element('p','source-label',label),element('pre','',content||'无'));}
 function renderResult(data,historical=false){
@@ -86,13 +89,19 @@ function renderResult(data,historical=false){
   $('#history-save-status').textContent='';
   $('#report-text').value=managementMarkdown(data);$('#report-backup').open=false;$('#download-status').textContent='';
   if(data.checks_remaining!==undefined)showCloudBudget(data.checks_remaining);
-  const r=data.report, issues=r.checks.flatMap(c=>c.issues);
+  const r=data.report, order={'高':0,'待确认':1,'中':2,'低':3};
+  // 展示层按同一规则合并重复问题；原始逐项判断仍完整保留在展开区与报告数据中。
+  const issues=r.checks.filter(c=>c.issues.length).map(c=>{
+    const sorted=[...c.issues].sort((a,b)=>(order[a.risk_level]??4)-(order[b.risk_level]??4));
+    const join=key=>[...new Set(c.issues.map(i=>i[key]).filter(Boolean))].join('；');
+    return {...sorted[0],risk_type:join('risk_type'),original_text:join('original_text'),suggestion:join('suggestion'),human_review_reason:join('human_review_reason'),needs_human_review:c.issues.some(i=>i.needs_human_review),explanation:c.reason};
+  }).sort((a,b)=>(order[a.risk_level]??4)-(order[b.risk_level]??4));
   $('#loading-result').hidden=true;$('#empty-result').hidden=true;$('#result-content').hidden=false;
   $('#stale-notice').hidden=true;$('#history-notice').hidden=!historical;
-  const uncertain=r.overall_status==='无法完整判断', clean=!issues.length&&r.input_complete;
+  const uncertain=!r.input_complete||r.overall_status==='无法完整判断', clean=!uncertain&&!issues.length;
   $('#summary').className='result-summary'+(clean?' clean':uncertain?' uncertain':'');
-  $('#summary-title').textContent=clean?'初筛通过，未发现明确规则风险':uncertain?'信息待补充，暂不能完成初筛':'发现规则风险，建议修改后复查';
-  $('#summary-note').textContent=clean?'本次提交材料通过题目十条规则初筛；可选优化不影响此结论，不代表全面合规认证。':r.input_complete?'请逐项处理规则问题；可选表达优化单独列出。':'已保留可见问题；检查不完整，请补充清晰原文件。';
+  $('#summary-title').textContent=clean?'未发现明确风险':uncertain?'材料不足，暂不能判断':'建议修改后复查';
+  $('#summary-note').textContent=clean?'本次材料未发现触发题目规则的问题，发布前请确认事实。':uncertain?'请补充完整、清晰的材料；已识别的问题仍需处理。':'请先处理下方问题，修改后重新检查。';
   $('#summary-symbol').textContent=clean?'✓':uncertain?'?':'!';
   $('#summary-kicker').textContent=historical?'历史检查结果':'检查完成';
   $('#issue-count').textContent=issues.length;$('#rule-count').textContent=r.checks.length;
@@ -107,12 +116,13 @@ function renderResult(data,historical=false){
   if(!issues.length)list.append(element('p','clean-note','这份材料在给定规则范围内没有发现需要整改的问题。'));
   issues.forEach(issue=>{
     const card=element('article','issue-card'),head=element('div','issue-heading'),title=element('div','issue-title');
-    title.append(element('span','badge',issue.rule_id),document.createTextNode(issue.risk_type));
+    title.textContent=issue.risk_type;
     const level=issue.risk_level, color=level==='高'?'high':level==='低'?'low':'medium';
     head.append(title,element('span',`badge ${color}`,level==='待确认'?level:`${level}风险`));
-    card.append(head,element('p','quote-label','风险原文'),element('blockquote','issue-quote',issue.original_text),
-      element('p','issue-rule','对应规则：'+issue.rule_text),element('p','issue-suggestion','修改建议：'+issue.suggestion),
-      element('p','issue-human',`人工审核：${issue.needs_human_review?'需要':'不需要'}${issue.human_review_reason?' · '+issue.human_review_reason:''}`));
+    card.append(head,element('p','quote-label','涉及原文'),element('blockquote','issue-quote',issue.original_text),
+      element('p','issue-explanation',issue.explanation),element('p','issue-suggestion','建议：'+issue.suggestion));
+    if(issue.needs_human_review)card.append(element('p','issue-human','需要人工复核'+(issue.human_review_reason?'：'+issue.human_review_reason:'')));
+    const basis=element('details');basis.append(element('summary','','查看判断依据'),element('p','issue-rule',issue.rule_id+' · '+issue.rule_text));card.append(basis);
     list.append(card);
   });
   const source=$('#source-content');source.replaceChildren();
@@ -143,6 +153,7 @@ async function submitReview(event){
     renderResult(result);
     rememberReport(result);
     $('#action-progress').textContent='检查完成，可查看结果或修改后复查';
+    if(matchMedia('(max-width:850px)').matches)$('#result-heading').scrollIntoView({block:'start'});
   }catch(error){
     $('#loading-result').hidden=true;$('#result-label').textContent='本次未完成';
     if(state.result){$('#result-content').hidden=false;$('#stale-notice').hidden=false;}
@@ -157,13 +168,13 @@ async function submitReview(event){
 async function loadHistory(){
   const list=$('#history-list');let local=[],warning='';
   try{local=savedReports();}catch{warning='浏览器记录暂时无法读取，下面尝试显示服务端仍保留的记录。';}
-  const localRows=local.map(r=>({id:r.id,time:r.run.executed_at,status:r.report.overall_status,title:r.input.image_file||r.input.text.slice(0,48),kind:r.input.image_file?'图片':'文字'}));
+  const localRows=local.map(r=>({id:r.id,time:r.run.executed_at,status:!r.report.input_complete?'材料不足，暂不能判断':r.report.checks.some(c=>c.issues.length)?'建议修改后复查':'未发现明确风险',title:r.input.image_file||r.input.text.slice(0,48),kind:r.input.image_file?'图片':'文字'}));
   function display(remote=[],message=''){
     const merged=new Map(remote.map(r=>[r.id,r]));localRows.forEach(r=>merged.set(r.id,r));
     const items=[...merged.values()].sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,30);
     list.replaceChildren();
     if(warning||message)list.append(element('p','report-note',warning||message));
-    if(!items.length)list.append(element('p','history-empty','本浏览器尚无保存的记录。从本次更新起，成功检查会自动保存在这里；此前已被服务器清除的记录无法自动恢复。'));
+    if(!items.length)list.append(element('p','history-empty','还没有检查记录。提交第一份材料后，报告会保存在这里。'));
     items.forEach(item=>{
       const button=element('button','history-card'),body=element('div');button.type='button';
       const saved=local.find(r=>r.id===item.id);
@@ -240,6 +251,10 @@ async function download(format){
   }finally{buttons.forEach(b=>b.disabled=false);}
 }
 async function init(){
+  const actionBar=$('.action-bar');
+  new ResizeObserver(()=>{if(actionBar.offsetHeight)document.documentElement.style.setProperty('--action-height',actionBar.offsetHeight+'px');}).observe(actionBar);
+  new ResizeObserver(entries=>document.documentElement.style.setProperty('--mobile-header-height',entries[0].target.offsetHeight+'px')).observe($('.sidebar'));
+  document.addEventListener('focusin',event=>{if(!actionBar.contains(event.target)&&!$('#view-review').hidden)requestAnimationFrame(()=>{const rect=event.target.getBoundingClientRect();if(rect.bottom>actionBar.getBoundingClientRect().top)event.target.scrollIntoView({block:'center'});});});
   $('#review-form').addEventListener('submit',submitReview);
   $$('.tab').forEach(btn=>{btn.addEventListener('click',()=>setMode(btn.dataset.mode));btn.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();setMode(state.mode==='text'?'image':'text');$(`#tab-${state.mode}`).focus();}});});
   $$('.nav-item').forEach(btn=>btn.addEventListener('click',()=>switchView(btn.dataset.view)));
@@ -280,5 +295,5 @@ async function init(){
     $('#rules-version').textContent='规则来源：作业题目及要求.docx · 版本 '+config.rules.version;
   }catch(error){$('#connection').textContent='连接未完成';$('#connection').className='connection error';showError('无法连接检查服务，请刷新页面或重新打开访问入口。');}
 }
-function showCloudBudget(remaining){$('.action-info p').textContent=`体验版剩余 ${remaining} 次检查 · 非百炼账户余额`;}
+function showCloudBudget(remaining){$('.action-info p').textContent=Number.isFinite(remaining)?`体验次数剩余 ${remaining} 次`:'检查会使用模型额度';}
 init();
