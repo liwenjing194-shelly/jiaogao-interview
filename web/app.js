@@ -199,11 +199,8 @@ async function download(format){
       try{await writable.write(blob);await writable.close();}catch(error){await writable.abort().catch(()=>{});throw error;}
       $('#download-status').textContent='报告已保存。检查结果仍保留在本页。';
     }else{
-      const url=URL.createObjectURL(blob),a=document.createElement('a');
-      a.href=url;a.download=filename;a.target='_blank';a.rel='noopener';a.hidden=true;document.body.append(a);
-      // 不让不支持download的浏览器用临时文件替换工作台；给予下载充分读取时间。
-      try{a.click();}finally{setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},60000);}
-      $('#download-status').textContent='已请求下载，请查看浏览器下载列表。如果没有文件，可用“查看 / 复制报告”保存。';
+      showReportBackup();
+      $('#download-status').textContent='当前浏览器不支持直接选择文件保存。请使用“保存 PDF 报告”，或复制下方报告文本保存。';
     }
   }catch(error){
     if(error.name==='AbortError')$('#download-status').textContent='已取消保存，报告仍保留在本页。';
