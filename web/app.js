@@ -3,6 +3,25 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const token = $('meta[name="review-token"]').content;
 const state = {mode:'text', image:null, preview:null, busy:false, result:null, rules:[], canCheck:false, imageVersion:0, loadingImage:false};
+const HISTORY_KEY='jiaogao.saved-reports.v1';
+function savedReports(){
+  const records=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
+  if(!Array.isArray(records)||records.some(r=>!r||typeof r.id!=='string'||!r.run||!r.input||!Array.isArray(r.report?.checks)))throw new Error('浏览器记录无法读取，请保留已有备份。');
+  return records;
+}
+function rememberReport(data){
+  try{
+    // 只保留最终报告文本，不保存访问码、接口密钥、图片文件或旧体验次数。
+    const item={id:data.id,run:data.run,input:data.input,report:data.report};
+    const records=[item,...savedReports().filter(r=>r.id!==data.id)].sort((a,b)=>new Date(b.run.executed_at)-new Date(a.run.executed_at)).slice(0,30);
+    localStorage.setItem(HISTORY_KEY,JSON.stringify(records));
+    $('#history-save-status').textContent='已保存到本浏览器的检查记录，服务器更新后仍可查看。';
+    return true;
+  }catch{
+    $('#history-save-status').textContent='本次结果未能保存到浏览器（空间不足或存储被限制）。请立即另存 PDF 或复制报告；已保存的旧记录不会因此被覆盖。';
+    return false;
+  }
+}
 const element = (tag, className, text) => {const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;};
 
 async function api(path, options={}) {
@@ -64,6 +83,7 @@ function switchView(view){
 function sourceBlock(parent,label,content){parent.append(element('p','source-label',label),element('pre','',content||'无'));}
 function renderResult(data,historical=false){
   state.result=data;
+  $('#history-save-status').textContent='';
   $('#report-text').value=managementMarkdown(data);$('#report-backup').open=false;$('#download-status').textContent='';
   if(data.checks_remaining!==undefined)showCloudBudget(data.checks_remaining);
   const r=data.report, issues=r.checks.flatMap(c=>c.issues);
@@ -121,6 +141,7 @@ async function submitReview(event){
     const image=selected?{name:selected.name,data:await asBase64(selected)}:null;
     const result=await api('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({text,evidence,incomplete:$('#incomplete').checked,image})});
     renderResult(result);
+    rememberReport(result);
     $('#action-progress').textContent='检查完成，可查看结果或修改后复查';
   }catch(error){
     $('#loading-result').hidden=true;$('#result-label').textContent='本次未完成';
@@ -134,18 +155,29 @@ async function submitReview(event){
   }
 }
 async function loadHistory(){
-  const list=$('#history-list');list.replaceChildren(element('p','history-empty','正在读取检查记录…'));
-  try{
-    const {items}=await api('/api/history');list.replaceChildren();
-    if(!items.length)list.append(element('p','history-empty','还没有检查记录。提交第一份材料后，结果会出现在这里。'));
+  const list=$('#history-list');let local=[],warning='';
+  try{local=savedReports();}catch{warning='浏览器记录暂时无法读取，下面尝试显示服务端仍保留的记录。';}
+  const localRows=local.map(r=>({id:r.id,time:r.run.executed_at,status:r.report.overall_status,title:r.input.image_file||r.input.text.slice(0,48),kind:r.input.image_file?'图片':'文字'}));
+  function display(remote=[],message=''){
+    const merged=new Map(remote.map(r=>[r.id,r]));localRows.forEach(r=>merged.set(r.id,r));
+    const items=[...merged.values()].sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,30);
+    list.replaceChildren();
+    if(warning||message)list.append(element('p','report-note',warning||message));
+    if(!items.length)list.append(element('p','history-empty','本浏览器尚无保存的记录。从本次更新起，成功检查会自动保存在这里；此前已被服务器清除的记录无法自动恢复。'));
     items.forEach(item=>{
       const button=element('button','history-card'),body=element('div');button.type='button';
-      body.append(element('strong','',item.title),element('small','',`${new Date(item.time).toLocaleString('zh-CN')} · ${item.kind}`));
+      const saved=local.find(r=>r.id===item.id);
+      body.append(element('strong','',item.title),element('small','',`${new Date(item.time).toLocaleString('zh-CN')} · ${item.kind} · ${saved?'本浏览器已保存':'服务端记录，打开后保存到本浏览器'}`));
       button.append(body,element('span','history-status',(item.status==='在本次输入和给定规则范围内未发现风险'?'本次未发现风险':item.status)+'  →'));
-      button.addEventListener('click',async()=>{button.disabled=true;try{const report=await api('/api/reports/'+encodeURIComponent(item.id));switchView('review');renderResult(report,true);}catch(error){list.prepend(element('p','error-message',error.message));}finally{button.disabled=false;}});
+      button.addEventListener('click',async()=>{button.disabled=true;try{const report=saved||await api('/api/reports/'+encodeURIComponent(item.id));switchView('review');renderResult(report,true);rememberReport(report);}catch(error){list.prepend(element('p','error-message',error.message));}finally{button.disabled=false;}});
       list.append(button);
     });
-  }catch(error){list.replaceChildren(element('p','error-message',error.message));}
+  }
+  display();
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),6000);
+  try{const {items}=await api('/api/history',{signal:controller.signal});display(items);}
+  catch{display([],'服务端记录暂时无法读取，已显示本浏览器保存的记录。');}
+  finally{clearTimeout(timeout);}
 }
 function managementSections(data){
   const r=data.report, input=data.input, order={'高':0,'待确认':1,'中':2,'低':3};
