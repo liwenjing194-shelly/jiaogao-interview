@@ -64,7 +64,7 @@ function switchView(view){
 function sourceBlock(parent,label,content){parent.append(element('p','source-label',label),element('pre','',content||'无'));}
 function renderResult(data,historical=false){
   state.result=data;
-  $('#report-text').value=data.markdown||'';$('#report-backup').open=false;$('#download-status').textContent='';
+  $('#report-text').value=managementMarkdown(data);$('#report-backup').open=false;$('#download-status').textContent='';
   if(data.checks_remaining!==undefined)showCloudBudget(data.checks_remaining);
   const r=data.report, issues=r.checks.flatMap(c=>c.issues);
   $('#loading-result').hidden=true;$('#empty-result').hidden=true;$('#result-content').hidden=false;
@@ -147,6 +147,40 @@ async function loadHistory(){
     });
   }catch(error){list.replaceChildren(element('p','error-message',error.message));}
 }
+function managementSections(data){
+  const r=data.report, input=data.input, order={'高':0,'待确认':1,'中':2,'低':3};
+  const issues=r.checks.filter(c=>c.issues.length).map(c=>{
+    const sorted=[...c.issues].sort((a,b)=>(order[a.risk_level]??4)-(order[b.risk_level]??4));
+    const combine=key=>[...new Set(c.issues.map(i=>i[key]).filter(Boolean))].join('；');
+    return {...sorted[0],original_text:combine('original_text'),risk_type:combine('risk_type'),suggestion:combine('suggestion'),human_review_reason:combine('human_review_reason'),needs_human_review:c.issues.some(i=>i.needs_human_review),reason:c.reason,
+      ...(c.rule_id==='A-06'?{risk_type:'疗效、安全或收益保证需核实',reason:'相关表述涉及敏感承诺，需要审核负责人核实适用条件与证明材料后，再决定是否使用。',suggestion:'暂停使用相关表述，保留原文并提交审核负责人确认；未经确认前不建议发布。'}:{})};
+  });
+  issues.sort((a,b)=>(order[a.risk_level]??4)-(order[b.risk_level]??4));
+  const plain=s=>String(s||'').replace(/A-\d{2}/g,'相关要求');
+  const decision=!r.input_complete?'资料不足，暂缓发布确认':issues.length?'建议完成整改并复核后再发布':'未发现明确问题，可进入发布确认';
+  const sections=[{title:'一、决策摘要',paragraphs:[decision,
+    !r.input_complete?`本次材料存在阅读或完整性限制，已识别 ${issues.length} 项待处理问题。需补充完整清晰材料后重新检查。`:issues.length?`本次识别 ${issues.length} 项待处理问题。建议由材料负责人逐项整改，由审核负责人确认处理结果。`:'本次提交内容中未发现明确触发检查要求的问题。可选文字优化不影响这一初筛结果；发布负责人仍需确认商业事实真实、材料完整。',
+    '本报告用于辅助管理决策，依据为本次提交材料和约定的广告宣传检查要求，不代表完整法律审查或正式发布批准。']}];
+  sections.push({title:'二、主要问题与处理建议',paragraphs:issues.length?[]:['本次没有需整改的明确问题。'],items:issues.map((i,n)=>({title:`${n+1}. ${plain(i.risk_type)}（${i.risk_level==='待确认'?'等级待确认':i.risk_level+'风险'}）`,paragraphs:[`涉及表述：${i.original_text}`,`需要关注：${plain(i.reason)}`,`建议行动：${plain(i.suggestion)}`,`确认要求：${i.needs_human_review?'需人工确认'+(i.human_review_reason?'；'+plain(i.human_review_reason):''):'本项未要求额外人工复核，发布前仍应核对事实。'}`]}))});
+  sections.push({title:'三、建议推进顺序',paragraphs:!r.input_complete?['请材料负责人先补齐清晰原图或缺失页面，再核查当前已发现的问题；资料齐全后重新检查，交由审核负责人确认。']:issues.length?['请材料负责人先处理高风险和待确认事项，再完成其余整改。涉及活动条件、数据或授权的，补充真实依据；修改后重新检查，由审核负责人确认是否发布。']:['请发布负责人确认商品信息及商业事实真实、当前材料完整，再按现有审批流程决定发布。无需为可选措辞优化重复认定风险。']});
+  sections.push({title:'四、待补资料与判断限制',paragraphs:r.limitations.length?r.limitations.map(plain):['本次未识别出影响阅读的明显限制；这不等于已验证所有商业主张真实。'],items:input.evidence?[{title:'已提供的补充说明',paragraphs:[input.evidence,'以上内容由提交者提供，其真实性尚未独立核验。']}]:[]});
+  if(r.optimization_suggestions?.length)sections.push({title:'五、可选文字优化',paragraphs:['以下建议不计入风险，不作为否决发布的理由。',...r.optimization_suggestions]});
+  sections.push({title:'附：本报告对应的送审材料',paragraphs:[...(input.image_file?[`图片文件：${input.image_file}`,'以下图片识别文字可能有遗漏，请与原图核对。',r.extracted_text||'无法可靠识别图片文字。']:[]),...(input.text?[input.image_file?'随图文案：'+input.text:input.text]:[])]});
+  return {date:String(data.run.executed_at||'').replace('T',' ').slice(0,19),sections};
+}
+function managementMarkdown(data){
+  const doc=managementSections(data),lines=['# 宣传材料发布决策参考','',`检查时间：${doc.date}`,''];
+  for(const section of doc.sections){lines.push('## '+section.title,'',...section.paragraphs.flatMap(p=>[p,'']));for(const item of section.items||[])lines.push('### '+item.title,'',...item.paragraphs.flatMap(p=>[p,'']));}
+  return lines.join('\n');
+}
+function prepareManagementPrint(){
+  if(!state.result||state.busy)return false;
+  const doc=managementSections(state.result),root=$('#management-print');root.replaceChildren();
+  root.append(element('p','print-brand','校稿 · 发布前检查'),element('h1','','宣传材料发布决策参考'),element('p','print-date','检查时间：'+doc.date));
+  if(!$('#stale-notice').hidden)root.append(element('p','print-warning','当前输入已有修改。本报告对应上一次检查材料，不代表修改后的检查结果。'));
+  for(const section of doc.sections){root.append(element('h2','',section.title));for(const p of section.paragraphs)root.append(element('p','',p));for(const item of section.items||[]){root.append(element('h3','',item.title));for(const p of item.paragraphs)root.append(element('p','',p));}}
+  return true;
+}
 function showReportBackup(){
   if(!state.result)return;
   $('#report-backup').open=true;$('#report-text').focus();$('#report-text').select();
@@ -158,9 +192,9 @@ async function download(format){
   const filename=`广告检查_${result.id}.${format}`;
   const buttons=[$('#download-md'),$('#download-json')];buttons.forEach(b=>b.disabled=true);
   try{
-    const blob=new Blob(['\ufeff',format==='md'?result.markdown:JSON.stringify(clean,null,2)],{type:type+';charset=utf-8'});
+    const blob=new Blob(['\ufeff',format==='md'?managementMarkdown(result):JSON.stringify(clean,null,2)],{type:type+';charset=utf-8'});
     if(typeof window.showSaveFilePicker==='function'){
-      const handle=await window.showSaveFilePicker({suggestedName:filename});
+      const handle=await window.showSaveFilePicker({suggestedName:filename,types:[{description:format==='md'?'Markdown 文档':'JSON 数据',accept:{[type]:['.'+format]}}]});
       const writable=await handle.createWritable();
       try{await writable.write(blob);await writable.close();}catch(error){await writable.abort().catch(()=>{});throw error;}
       $('#download-status').textContent='报告已保存。检查结果仍保留在本页。';
@@ -204,6 +238,7 @@ async function init(){
     }
   }));
   $('#download-md').addEventListener('click',()=>download('md'));$('#download-json').addEventListener('click',()=>download('json'));
+  $('#download-pdf').addEventListener('click',()=>{if(!prepareManagementPrint())return;$('#download-status').textContent='请在打印窗口选择“另存为 PDF”。取消保存不会删除报告。';try{window.print();}catch{showReportBackup();$('#download-status').textContent='当前浏览器无法打开打印窗口，请使用系统浏览器保存 PDF，或复制报告文本。';}});
   $('#view-report').addEventListener('click',showReportBackup);
   $('#copy-report').addEventListener('click',async()=>{showReportBackup();try{await navigator.clipboard.writeText($('#report-text').value);$('#download-status').textContent='报告已复制，可粘贴到本地文档。';}catch{$('#download-status').textContent='已选中报告，请按 Ctrl+C 或长按文本复制。';}});
   window.addEventListener('beforeunload',event=>{if(state.busy){event.preventDefault();event.returnValue='';}});

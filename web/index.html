@@ -71,7 +71,9 @@
             <section id="optimizations" hidden><div class="section-line"><h3>可选优化建议</h3><span>不计入风险</span></div><div id="optimization-list"></div></section>
             <details class="result-details"><summary>查看本次材料与识别文字</summary><div id="source-content" class="details-content"></div></details>
             <details class="result-details"><summary>查看全部 10 条规则的判断</summary><div id="all-checks" class="details-content"></div></details>
-            <div class="report-actions"><button id="download-md" class="secondary-button" type="button">↓ 下载检查报告</button><button id="download-json" class="text-button" type="button">下载 JSON</button><button id="view-report" class="text-button" type="button">查看 / 复制报告</button></div>
+            <div class="report-actions"><button id="download-pdf" class="secondary-button" type="button">保存 PDF 报告</button><button id="download-md" class="text-button" type="button">下载 Markdown 备份</button><button id="view-report" class="text-button" type="button">查看 / 复制报告</button></div>
+            <p class="report-note">PDF：在弹出的打印窗口中，将目标选择为“另存为 PDF”，再点击保存。Markdown 为纯文本备份，可用记事本打开。</p>
+            <details class="result-details"><summary>开发调试数据（非管理层报告）</summary><button id="download-json" class="text-button" type="button">下载 JSON 数据</button></details>
             <p id="download-status" class="report-note" role="status" aria-live="polite"></p>
             <details id="report-backup" class="result-details"><summary>报告文本备份</summary><div class="details-content"><label for="report-text">可以全选并复制下方报告，保存到本地文档。</label><textarea id="report-text" rows="10" readonly></textarea><button id="copy-report" class="secondary-button" type="button">复制报告</button></div></details>
             <p class="report-note">本次结果仅适用于提交材料与题目规则。风险与证据缺口需由人工确认。</p>
@@ -90,5 +92,6 @@
     <section id="view-history" class="view" hidden><div class="page-heading"><div class="eyebrow">REVIEW HISTORY</div><h1>每次检查，都有记录。</h1><p>查看本机最近 30 份真实结果，打开历史记录不会再次消耗模型额度。</p></div><div id="history-list" class="history-list"></div></section>
     <section id="view-rules" class="view" hidden><div class="page-heading"><div class="eyebrow">REVIEW GUIDELINES</div><h1>判断从哪里来？</h1><p>每次检查完整使用题目给定的 A-01 至 A-10，以下为规则原文。</p></div><div class="rule-intro"><h2>先理解这三个边界</h2><p>“未发现风险”仅限本次材料与题目规则，不代表已获得发布许可。看不清或缺少证据时明确要求补充；用户提供的来源、授权和效果资料仍需人工核验真实性。</p><p>修改建议采用按规则设置的保守整改要求，不代填活动日期或证明资料。高、中、低、待确认是本项目的分级；所有发现的问题都需人工确认后处理。</p></div><div id="rules-list" class="rules-list"></div><p id="rules-version" class="report-note"></p></section>
   </main>
+<article id="management-print" aria-label="管理层决策报告"></article>
 </body>
 </html>
