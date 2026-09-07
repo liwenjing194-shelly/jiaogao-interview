@@ -64,6 +64,7 @@ function switchView(view){
 function sourceBlock(parent,label,content){parent.append(element('p','source-label',label),element('pre','',content||'无'));}
 function renderResult(data,historical=false){
   state.result=data;
+  $('#report-text').value=data.markdown||'';$('#report-backup').open=false;$('#download-status').textContent='';
   if(data.checks_remaining!==undefined)showCloudBudget(data.checks_remaining);
   const r=data.report, issues=r.checks.flatMap(c=>c.issues);
   $('#loading-result').hidden=true;$('#empty-result').hidden=true;$('#result-content').hidden=false;
@@ -146,12 +147,34 @@ async function loadHistory(){
     });
   }catch(error){list.replaceChildren(element('p','error-message',error.message));}
 }
-function download(format){
+function showReportBackup(){
+  if(!state.result)return;
+  $('#report-backup').open=true;$('#report-text').focus();$('#report-text').select();
+}
+async function download(format){
   if(!state.result||state.busy)return;
-  const result=state.result, type=format==='md'?'text/markdown':'application/json';
+  const result=state.result, type=format==='md'?'text/plain':'application/json';
   const clean={run:result.run,input:result.input,report:result.report};
-  const blob=new Blob(['\ufeff',format==='md'?result.markdown:JSON.stringify(clean,null,2)],{type:type+';charset=utf-8'});
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`广告检查_${result.id}.${format}`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const filename=`广告检查_${result.id}.${format}`;
+  const buttons=[$('#download-md'),$('#download-json')];buttons.forEach(b=>b.disabled=true);
+  try{
+    const blob=new Blob(['\ufeff',format==='md'?result.markdown:JSON.stringify(clean,null,2)],{type:type+';charset=utf-8'});
+    if(typeof window.showSaveFilePicker==='function'){
+      const handle=await window.showSaveFilePicker({suggestedName:filename});
+      const writable=await handle.createWritable();
+      try{await writable.write(blob);await writable.close();}catch(error){await writable.abort().catch(()=>{});throw error;}
+      $('#download-status').textContent='报告已保存。检查结果仍保留在本页。';
+    }else{
+      const url=URL.createObjectURL(blob),a=document.createElement('a');
+      a.href=url;a.download=filename;a.target='_blank';a.rel='noopener';a.hidden=true;document.body.append(a);
+      // 不让不支持download的浏览器用临时文件替换工作台；给予下载充分读取时间。
+      try{a.click();}finally{setTimeout(()=>{a.remove();URL.revokeObjectURL(url);},60000);}
+      $('#download-status').textContent='已请求下载，请查看浏览器下载列表。如果没有文件，可用“查看 / 复制报告”保存。';
+    }
+  }catch(error){
+    if(error.name==='AbortError')$('#download-status').textContent='已取消保存，报告仍保留在本页。';
+    else{showReportBackup();$('#download-status').textContent='未能启动下载。报告仍保留在本页，请复制下方文本保存，或在系统浏览器中打开后重试。';}
+  }finally{buttons.forEach(b=>b.disabled=false);}
 }
 async function init(){
   $('#review-form').addEventListener('submit',submitReview);
@@ -181,6 +204,8 @@ async function init(){
     }
   }));
   $('#download-md').addEventListener('click',()=>download('md'));$('#download-json').addEventListener('click',()=>download('json'));
+  $('#view-report').addEventListener('click',showReportBackup);
+  $('#copy-report').addEventListener('click',async()=>{showReportBackup();try{await navigator.clipboard.writeText($('#report-text').value);$('#download-status').textContent='报告已复制，可粘贴到本地文档。';}catch{$('#download-status').textContent='已选中报告，请按 Ctrl+C 或长按文本复制。';}});
   window.addEventListener('beforeunload',event=>{if(state.busy){event.preventDefault();event.returnValue='';}});
   try{
     const config=await api('/api/config');state.rules=config.rules.rules;state.canCheck=config.key_configured;

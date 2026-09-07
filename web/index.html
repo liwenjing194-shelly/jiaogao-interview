@@ -71,7 +71,9 @@
             <section id="optimizations" hidden><div class="section-line"><h3>可选优化建议</h3><span>不计入风险</span></div><div id="optimization-list"></div></section>
             <details class="result-details"><summary>查看本次材料与识别文字</summary><div id="source-content" class="details-content"></div></details>
             <details class="result-details"><summary>查看全部 10 条规则的判断</summary><div id="all-checks" class="details-content"></div></details>
-            <div class="report-actions"><button id="download-md" class="secondary-button" type="button">↓ 下载检查报告</button><button id="download-json" class="text-button" type="button">下载 JSON</button></div>
+            <div class="report-actions"><button id="download-md" class="secondary-button" type="button">↓ 下载检查报告</button><button id="download-json" class="text-button" type="button">下载 JSON</button><button id="view-report" class="text-button" type="button">查看 / 复制报告</button></div>
+            <p id="download-status" class="report-note" role="status" aria-live="polite"></p>
+            <details id="report-backup" class="result-details"><summary>报告文本备份</summary><div class="details-content"><label for="report-text">可以全选并复制下方报告，保存到本地文档。</label><textarea id="report-text" rows="10" readonly></textarea><button id="copy-report" class="secondary-button" type="button">复制报告</button></div></details>
             <p class="report-note">本次结果仅适用于提交材料与题目规则。风险与证据缺口需由人工确认。</p>
           </div>
         </section>
