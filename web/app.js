@@ -170,6 +170,8 @@ async function loadHistory(){
   try{local=savedReports();}catch{warning='浏览器记录暂时无法读取，下面尝试显示服务端仍保留的记录。';}
   const localRows=local.map(r=>({id:r.id,time:r.run.executed_at,status:!r.report.input_complete?'材料不足，暂不能判断':r.report.checks.some(c=>c.issues.length)?'建议修改后复查':'未发现明确风险',title:r.input.image_file||r.input.text.slice(0,48),kind:r.input.image_file?'图片':'文字'}));
   function display(remote=[],message=''){
+    const displayStatus=status=>String(status||'').includes('未发现风险')?'未发现明确风险':String(status||'').includes('无法完整判断')||String(status||'').includes('材料不足')?'材料不足，暂不能判断':String(status||'').includes('发现风险')?'建议修改后复查':'检查结果';
+    remote=remote.map(r=>({...r,status:displayStatus(r.status)}));
     const merged=new Map(remote.map(r=>[r.id,r]));localRows.forEach(r=>merged.set(r.id,r));
     const items=[...merged.values()].sort((a,b)=>new Date(b.time)-new Date(a.time)).slice(0,30);
     list.replaceChildren();
