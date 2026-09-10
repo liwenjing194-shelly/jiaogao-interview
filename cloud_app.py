@@ -72,7 +72,7 @@ def create_app(settings=None):
     def protect():
         if request.method == 'POST' and request.headers.get('Origin') != app.config['PUBLIC_ORIGIN']:
             return jsonify(error='请求来源不正确，请重新打开工作台。'), 403
-        if request.path in {'/health', '/login', '/style.css', '/favicon.svg'}:
+        if request.path in {'/health', '/login', '/style.css', '/favicon.svg', '/login.css', '/login.js'}:
             return None
         if not session.get('owner'):
             return (jsonify(error='请先输入访问码进入工作台。'), 401) if request.path.startswith('/api/') else redirect('/login')
@@ -111,7 +111,7 @@ def create_app(settings=None):
 
     @app.get('/<name>')
     def static_file(name):
-        if name not in {'style.css', 'app.js', 'favicon.svg'}:
+        if name not in {'style.css', 'app.js', 'favicon.svg', 'login.css', 'login.js'}:
             return jsonify(error='页面不存在。'), 404
         return send_file(WEB / name)
 
