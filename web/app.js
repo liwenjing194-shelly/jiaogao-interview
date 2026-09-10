@@ -182,7 +182,7 @@ async function loadHistory(){
       const saved=local.find(r=>r.id===item.id);
       body.append(element('strong','',item.title),element('small','',`${new Date(item.time).toLocaleString('zh-CN')} · ${item.kind} · ${saved?'本浏览器已保存':'服务端记录，打开后保存到本浏览器'}`));
       button.append(body,element('span','history-status',(item.status==='在本次输入和给定规则范围内未发现风险'?'本次未发现风险':item.status)+'  →'));
-      button.addEventListener('click',async()=>{button.disabled=true;try{const report=saved||await api('/api/reports/'+encodeURIComponent(item.id));switchView('review');renderResult(report,true);rememberReport(report);}catch(error){list.prepend(element('p','error-message',error.message));}finally{button.disabled=false;}});
+      button.addEventListener('click',async()=>{button.disabled=true;try{const report=saved||await api('/api/reports/'+encodeURIComponent(item.id));switchView('review');renderResult(report,true);rememberReport(report);if(matchMedia('(max-width:850px)').matches)$('#result-heading').scrollIntoView({block:'start'});}catch(error){list.prepend(element('p','error-message',error.message));}finally{button.disabled=false;}});
       list.append(button);
     });
   }
@@ -211,7 +211,9 @@ function managementSections(data){
   sections.push({title:'四、待补资料与判断限制',paragraphs:r.limitations.length?r.limitations.map(plain):['本次未识别出影响阅读的明显限制；这不等于已验证所有商业主张真实。'],items:input.evidence?[{title:'已提供的补充说明',paragraphs:[input.evidence,'以上内容由提交者提供，其真实性尚未独立核验。']}]:[]});
   if(r.optimization_suggestions?.length)sections.push({title:'五、可选文字优化',paragraphs:['以下建议不计入风险，不作为否决发布的理由。',...r.optimization_suggestions]});
   sections.push({title:'附：本报告对应的送审材料',paragraphs:[...(input.image_file?[`图片文件：${input.image_file}`,'以下图片识别文字可能有遗漏，请与原图核对。',r.extracted_text||'无法可靠识别图片文字。']:[]),...(input.text?[input.image_file?'随图文案：'+input.text:input.text]:[])]});
-  return {date:String(data.run.executed_at||'').replace('T',' ').slice(0,19),sections};
+  const executedAt=new Date(data.run.executed_at);
+  const date=Number.isNaN(executedAt.getTime())?'时间未记录':executedAt.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+'（北京时间）';
+  return {date,sections};
 }
 function managementMarkdown(data){
   const doc=managementSections(data),lines=['# 宣传材料发布决策参考','',`检查时间：${doc.date}`,''];
