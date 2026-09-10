@@ -32,6 +32,7 @@ SAFE_SUGGESTIONS = {
     "A-08": "确认是否存在押金、运费、自动续费等必要费用并显著披露；费用信息未确认前不要直接使用免费或零元承诺。",
     "A-09": "补充评价或背书的真实性及授权依据，由人工核验；无法提供时删除该评价或背书宣传。",
     "A-10": "提供清晰原文件或完整页面后重新检查；保留本次可见部分已经发现的问题。",
+    "A-11": "删除将性别、职业或其他群体身份与负面属性关联的表述，改为针对具体行为、产品或普遍适用的客观提醒；避免仅替换群体称谓而保留贬损暗示，并提交人工复核。",
 }
 
 
@@ -46,8 +47,8 @@ def load_json(path):
 def load_rules():
     rules = load_json(ROOT / "rules.json")
     ids = [r["id"] for r in rules["rules"]]
-    if ids != [f"A-{i:02d}" for i in range(1, 11)]:
-        raise CheckError("规则文件必须依次包含A-01至A-10。")
+    if ids != [f"A-{i:02d}" for i in range(1, 12)]:
+        raise CheckError("规则文件必须依次包含A-01至A-11。")
     return rules
 
 
@@ -75,7 +76,7 @@ def build_payload(text, image_path, evidence, incomplete, config, rules):
         url = f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
         content.append({"type": "image_url", "image_url": {"url": url}})
     prompt = (ROOT / "prompts" / "check.txt").read_text(encoding="utf-8")
-    prompt += "\n以下为题目给定规则：\n" + json.dumps(rules, ensure_ascii=False)
+    prompt += "\n以下为检查规则，A-01至A-10来自题目，A-11为用户新增业务规则：\n" + json.dumps(rules, ensure_ascii=False)
     return {"model": config["model"], "messages": [
         {"role": "system", "content": prompt},
         {"role": "user", "content": content}],
@@ -144,10 +145,10 @@ def validate_report(report, text, has_image, incomplete, rules):
     require(isinstance(codes, list) and len(codes) <= 2 and all(isinstance(code, str) and code in OPTIMIZATIONS for code in codes), "可选优化代码错误")
     report["optimization_suggestions"] = [OPTIMIZATIONS[code] for code in dict.fromkeys(codes)]
     checks = report.get("checks")
-    require(isinstance(checks, list) and len(checks) == 10 and all(isinstance(c, dict) for c in checks), "必须检查10条规则")
+    require(isinstance(checks, list) and len(checks) == len(rules["rules"]) and all(isinstance(c, dict) for c in checks), "必须检查当前规则集的全部规则")
     rule_map = {r["id"]: r for r in rules["rules"]}
     ids = [c.get("rule_id") for c in checks]
-    require(all(isinstance(i, str) for i in ids) and len(set(ids)) == 10 and set(ids) == set(rule_map), "规则编号缺失或重复")
+    require(all(isinstance(i, str) for i in ids) and len(set(ids)) == len(rule_map) and set(ids) == set(rule_map), "规则编号缺失或重复")
     for c in checks:
         require(isinstance(c.get("status"), str) and c["status"] in STATES, "规则状态错误")
         require(isinstance(c.get("reason"), str) and bool(c["reason"].strip()), "缺少规则判断原因")
@@ -168,7 +169,7 @@ def validate_report(report, text, has_image, incomplete, rules):
                 require(quote in text or (c["rule_id"] == "A-10" and quote == "无法可靠提取"), "风险原文不是输入中的真实片段")
             issue["rule_id"] = c["rule_id"]
             issue["rule_text"] = rule_map[c["rule_id"]]["requirement"]
-            if c["rule_id"] in {"A-06", "A-10"} or c["status"] == "无法判断" or issue["risk_level"] in {"高", "待确认"}:
+            if c["rule_id"] in {"A-06", "A-10", "A-11"} or c["status"] == "无法判断" or issue["risk_level"] in {"高", "待确认"}:
                 issue["needs_human_review"] = True
                 issue["human_review_reason"] = issue["human_review_reason"].strip() or "命中强制复核规则、高风险或信息不足，需人工确认。"
     by_id = {c["rule_id"]: c for c in checks}
