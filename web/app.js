@@ -98,6 +98,8 @@ function renderResult(data,historical=false){
   }).sort((a,b)=>(order[a.risk_level]??4)-(order[b.risk_level]??4));
   $('#loading-result').hidden=true;$('#empty-result').hidden=true;$('#result-content').hidden=false;
   $('#stale-notice').hidden=true;$('#history-notice').hidden=!historical;
+  $('#coverage-notice').hidden=r.checks.some(c=>c.rule_id==='A-11');
+  $('#all-checks-heading').textContent=`查看本报告 ${r.checks.length} 条规则的判断`;
   const uncertain=!r.input_complete||r.overall_status==='无法完整判断', clean=!uncertain&&!issues.length;
   $('#summary').className='result-summary'+(clean?' clean':uncertain?' uncertain':'');
   $('#summary-title').textContent=clean?'未发现明确风险':uncertain?'材料不足，暂不能判断':'建议修改后复查';
@@ -202,7 +204,7 @@ function managementSections(data){
   });
   issues.sort((a,b)=>(order[a.risk_level]??4)-(order[b.risk_level]??4));
   const plain=s=>String(s||'').replace(/A-\d{2}/g,'相关要求');
-  const decision=!r.input_complete?'资料不足，暂缓发布确认':issues.length?'建议完成整改并复核后再发布':'未发现明确问题，可进入发布确认';
+  const decision=!r.input_complete||r.overall_status==='无法完整判断'?'资料不足，暂缓发布确认':issues.length?'建议完成整改并复核后再发布':'未发现明确问题，可进入发布确认';
   const sections=[{title:'一、决策摘要',paragraphs:[decision,
     !r.input_complete?`本次材料存在阅读或完整性限制，已识别 ${issues.length} 项待处理问题。需补充完整清晰材料后重新检查。`:issues.length?`本次识别 ${issues.length} 项待处理问题。建议由材料负责人逐项整改，由审核负责人确认处理结果。`:'本次提交内容中未发现明确触发检查要求的问题。可选文字优化不影响这一初筛结果；发布负责人仍需确认商业事实真实、材料完整。',
     '本报告用于辅助管理决策，依据为本次提交材料和约定的广告宣传检查要求，不代表完整法律审查或正式发布批准。']}];
@@ -212,6 +214,7 @@ function managementSections(data){
   if(r.optimization_suggestions?.length)sections.push({title:'五、可选文字优化',paragraphs:['以下建议不计入风险，不作为否决发布的理由。',...r.optimization_suggestions]});
   sections.push({title:'附：本报告对应的送审材料',paragraphs:[...(input.image_file?[`图片文件：${input.image_file}`,'以下图片识别文字可能有遗漏，请与原图核对。',r.extracted_text||'无法可靠识别图片文字。']:[]),...(input.text?[input.image_file?'随图文案：'+input.text:input.text]:[])]});
   const executedAt=new Date(data.run.executed_at);
+  if(!r.checks.some(c=>c.rule_id==='A-11'))sections.unshift({title:'检查范围提醒',paragraphs:['这是旧版报告，未包含新增的歧视与群体贬损检查。请重新提交材料后再使用。']});
   const date=Number.isNaN(executedAt.getTime())?'时间未记录':executedAt.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+'（北京时间）';
   return {date,sections};
 }
@@ -296,7 +299,7 @@ async function init(){
     $('#connection').textContent=state.canCheck?'检查服务已就绪':'模型密钥未配置';$('#connection').className='connection '+(state.canCheck?'ok':'error');
     if(!state.canCheck)showError(config.cloud?'检查服务尚未配置完成，请联系演示者。':'模型密钥未配置。请在本地终端运行启动脚本，按提示输入密钥后重新打开页面。');
     $('#rules-list').replaceChildren(...state.rules.map(rule=>{const card=element('article','rule-card');const h=element('h3');h.append(element('span','badge',rule.id),document.createTextNode(rule.title));card.append(h,element('p','',rule.requirement));return card;}));
-    $('#rules-version').textContent='规则来源：作业题目及要求.docx · 版本 '+config.rules.version;
+    $('#rules-version').textContent='A-01 至 A-10：作业题目原文；A-11：用户新增业务规则 · 版本 '+config.rules.version;
   }catch(error){$('#connection').textContent='连接未完成';$('#connection').className='connection error';showError('无法连接检查服务，请刷新页面或重新打开访问入口。');}
 }
 function showCloudBudget(remaining){$('.action-info p').textContent=Number.isFinite(remaining)?`体验次数剩余 ${remaining} 次`:'检查会使用模型额度';}
