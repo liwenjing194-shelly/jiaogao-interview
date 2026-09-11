@@ -4,6 +4,52 @@ const $$ = selector => [...document.querySelectorAll(selector)];
 const token = $('meta[name="review-token"]').content;
 const state = {mode:'text', image:null, preview:null, busy:false, result:null, rules:[], canCheck:false, imageVersion:0, loadingImage:false};
 const HISTORY_KEY='jiaogao.saved-reports.v1';
+let materialVersion=0,historyImageURL=null;
+function imageStore(mode,action){
+  return new Promise((resolve,reject)=>{
+    let db,tx,done=false;
+    const finish=(error,value)=>{if(done)return;done=true;clearTimeout(timer);if(db)db.close();error?reject(error):resolve(value);};
+    const timer=setTimeout(()=>{try{tx?.abort();}catch{}finish(new Error('本地图片存储超时'));},4000);
+    try{
+      const opening=indexedDB.open('jiaogao.materials.v1',1);
+      opening.onupgradeneeded=()=>opening.result.createObjectStore('images');
+      opening.onerror=()=>finish(new Error('本地图片存储不可用'));
+      opening.onblocked=()=>finish(new Error('本地图片存储被占用'));
+      opening.onsuccess=()=>{db=opening.result;if(done){db.close();return;}try{tx=db.transaction('images',mode);const request=action(tx.objectStore('images'));tx.oncomplete=()=>finish(null,request.result);tx.onerror=tx.onabort=()=>finish(new Error('图片读写失败'));}catch(e){finish(e);}};
+    }catch(e){finish(e);}
+  });
+}
+async function saveReportImage(id,file){
+  const keep=new Set(savedReports().map(r=>r.id));
+  return imageStore('readwrite',store=>{const cursor=store.openCursor();cursor.onsuccess=()=>{const item=cursor.result;if(item){if(!keep.has(item.key))item.delete();item.continue();}};return file?store.put(file,id):store.get(id);});
+}
+function showEditor(){
+  materialVersion++;if(historyImageURL){URL.revokeObjectURL(historyImageURL);historyImageURL=null;}
+  state.viewingHistory=false;$('#historical-material').hidden=true;$('#review-form').hidden=false;
+  $('#input-heading').lastChild.textContent='提交材料';$('#submit span:first-child').textContent=state.result?'重新检查':'开始检查';
+  $('#action-progress').textContent='编辑内容已保留，可继续检查';markStale();
+}
+async function showHistoryMaterial(data){
+  const version=++materialVersion;if(historyImageURL){URL.revokeObjectURL(historyImageURL);historyImageURL=null;}
+  state.viewingHistory=true;$('#review-form').hidden=true;$('#historical-material').hidden=false;
+  $('#input-heading').lastChild.textContent='当时提交的材料';$('#submit span:first-child').textContent='返回编辑';
+  $('#action-progress').textContent='正在查看历史材料与结果';showError('');
+  const source=$('#historical-source');source.replaceChildren();
+  sourceBlock(source,data.input.image_file?'附带文案':'广告文案',data.input.text);
+  if(data.input.image_file){
+    sourceBlock(source,'原图片文件',data.input.image_file);
+    const imageBox=element('div','history-image-box'),status=element('p','report-note','正在读取本浏览器保存的原图…');source.append(imageBox,status);
+    sourceBlock(source,'当时识别的图片文字（请与原图核对）',data.report.extracted_text);
+    imageStore('readonly',store=>store.get(data.id)).then(blob=>{
+      if(version!==materialVersion)return;
+      if(!(blob instanceof Blob)){status.className='notice';status.textContent='当前浏览器未保存这份原图（可能是旧版或其他设备的记录）。下方识别文字不能代替原图；需要复查时请重新上传。';return;}
+      historyImageURL=URL.createObjectURL(blob);const img=element('img','history-original');img.alt='当时提交的海报原图';img.src=historyImageURL;imageBox.append(img);status.textContent='当时提交的原图，仅保存在当前浏览器。';
+    }).catch(()=>{if(version===materialVersion){status.className='notice';status.textContent='本地原图暂时无法读取，请保留原文件；文字报告仍可查看。';}});
+  }
+  sourceBlock(source,'补充判断依据（未经独立核实）',data.input.evidence);
+  source.append(element('p','source-note','完整性声明：'+(data.input.declared_incomplete?'当时已声明有截断、遮挡或缺页':'当时未声明材料不完整')));
+}
+function reportOptimizations(report){return report.optimization_version===2?report.optimization_suggestions||[]:[];}
 function savedReports(){
   const records=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
   if(!Array.isArray(records)||records.some(r=>!r||typeof r.id!=='string'||!r.run||!r.input||!Array.isArray(r.report?.checks)))throw new Error('浏览器记录无法读取，请保留已有备份。');
@@ -11,7 +57,7 @@ function savedReports(){
 }
 function rememberReport(data){
   try{
-    // 只保留最终报告文本，不保存访问码、接口密钥、图片文件或旧体验次数。
+    // 报告文本存 localStorage；新原图另存 IndexedDB，不保存访问码或接口密钥。
     const item={id:data.id,run:data.run,input:data.input,report:data.report};
     const records=[item,...savedReports().filter(r=>r.id!==data.id)].sort((a,b)=>new Date(b.run.executed_at)-new Date(a.run.executed_at)).slice(0,30);
     localStorage.setItem(HISTORY_KEY,JSON.stringify(records));
@@ -86,6 +132,7 @@ function switchView(view){
 function sourceBlock(parent,label,content){parent.append(element('p','source-label',label),element('pre','',content||'无'));}
 function renderResult(data,historical=false){
   state.result=data;
+  if(historical)showHistoryMaterial(data);else showEditor();
   $('#history-save-status').textContent='';
   $('#report-text').value=managementMarkdown(data);$('#report-backup').open=false;$('#download-status').textContent='';
   if(data.checks_remaining!==undefined)showCloudBudget(data.checks_remaining);
@@ -112,7 +159,7 @@ function renderResult(data,historical=false){
   $('#review-required').textContent=r.needs_human_review?'需要人工审核':'无待复核事项';
   $('#limitations').hidden=!r.limitations.length;$('#limitation-list').replaceChildren(...r.limitations.map(t=>element('li','',t)));
   const list=$('#issues');list.replaceChildren();
-  const optimizations=r.optimization_suggestions||[];
+  const optimizations=reportOptimizations(r);
   $('#optimizations').hidden=!optimizations.length;
   $('#optimization-list').replaceChildren(...optimizations.map(t=>element('p','clean-note',t)));
   if(!issues.length)list.append(element('p','clean-note','这份材料在给定规则范围内没有发现需要整改的问题。'));
@@ -136,6 +183,7 @@ function renderResult(data,historical=false){
 }
 async function submitReview(event){
   event.preventDefault();if(state.busy)return;showError('');
+  if(state.viewingHistory){showEditor();$('#input-heading').scrollIntoView({block:'start'});return;}
   if(state.loadingImage){showError('图片仍在读取，请稍候再检查。');return;}
   if(!state.canCheck){showError('尚未配置模型密钥。请在启动程序的本地终端配置后重启工作台。');return;}
   const text=(state.mode==='text'?$('#ad-text').value:$('#image-caption').value).trim();
@@ -153,7 +201,8 @@ async function submitReview(event){
     const image=selected?{name:selected.name,data:await asBase64(selected)}:null;
     const result=await api('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,body:JSON.stringify({text,evidence,incomplete:$('#incomplete').checked,image})});
     renderResult(result);
-    rememberReport(result);
+    const saved=rememberReport(result);
+    if(saved){try{await saveReportImage(result.id,selected);}catch{if(selected){$('#history-save-status').className='report-note save-failed';$('#history-save-status').textContent='文字报告已保存，但原图未能保存在本浏览器。请保留原文件，历史记录可能无法显示原图。';}}}
     $('#action-progress').textContent='检查完成，可查看结果或修改后复查';
     if(matchMedia('(max-width:850px)').matches)$('#result-heading').scrollIntoView({block:'start'});
   }catch(error){
@@ -184,7 +233,7 @@ async function loadHistory(){
       const saved=local.find(r=>r.id===item.id);
       body.append(element('strong','',item.title),element('small','',`${new Date(item.time).toLocaleString('zh-CN')} · ${item.kind} · ${saved?'本浏览器已保存':'服务端记录，打开后保存到本浏览器'}`));
       button.append(body,element('span','history-status',(item.status==='在本次输入和给定规则范围内未发现风险'?'本次未发现风险':item.status)+'  →'));
-      button.addEventListener('click',async()=>{button.disabled=true;try{const report=saved||await api('/api/reports/'+encodeURIComponent(item.id));switchView('review');renderResult(report,true);rememberReport(report);if(matchMedia('(max-width:850px)').matches)$('#result-heading').scrollIntoView({block:'start'});}catch(error){list.prepend(element('p','error-message',error.message));}finally{button.disabled=false;}});
+      button.addEventListener('click',async()=>{button.disabled=true;try{const report=saved||await api('/api/reports/'+encodeURIComponent(item.id));switchView('review');renderResult(report,true);rememberReport(report);if(matchMedia('(max-width:850px)').matches)$('#input-heading').scrollIntoView({block:'start'});}catch(error){list.prepend(element('p','error-message',error.message));}finally{button.disabled=false;}});
       list.append(button);
     });
   }
@@ -211,7 +260,7 @@ function managementSections(data){
   sections.push({title:'二、主要问题与处理建议',paragraphs:issues.length?[]:['本次没有需整改的明确问题。'],items:issues.map((i,n)=>({title:`${n+1}. ${plain(i.risk_type)}（${i.risk_level==='待确认'?'等级待确认':i.risk_level+'风险'}）`,paragraphs:[`涉及表述：${i.original_text}`,`需要关注：${plain(i.reason)}`,`建议行动：${plain(i.suggestion)}`,`确认要求：${i.needs_human_review?'需人工确认'+(i.human_review_reason?'；'+plain(i.human_review_reason):''):'本项未要求额外人工复核，发布前仍应核对事实。'}`]}))});
   sections.push({title:'三、建议推进顺序',paragraphs:!r.input_complete?['请材料负责人先补齐清晰原图或缺失页面，再核查当前已发现的问题；资料齐全后重新检查，交由审核负责人确认。']:issues.length?['请材料负责人先处理高风险和待确认事项，再完成其余整改。涉及活动条件、数据或授权的，补充真实依据；修改后重新检查，由审核负责人确认是否发布。']:['请发布负责人确认商品信息及商业事实真实、当前材料完整，再按现有审批流程决定发布。无需为可选措辞优化重复认定风险。']});
   sections.push({title:'四、待补资料与判断限制',paragraphs:r.limitations.length?r.limitations.map(plain):['本次未识别出影响阅读的明显限制；这不等于已验证所有商业主张真实。'],items:input.evidence?[{title:'已提供的补充说明',paragraphs:[input.evidence,'以上内容由提交者提供，其真实性尚未独立核验。']}]:[]});
-  if(r.optimization_suggestions?.length)sections.push({title:'五、可选文字优化',paragraphs:['以下建议不计入风险，不作为否决发布的理由。',...r.optimization_suggestions]});
+  if(reportOptimizations(r).length)sections.push({title:'五、可选文字优化',paragraphs:['以下建议不计入风险；示例只调整表达或排版，请核对后使用。',...reportOptimizations(r)]});
   sections.push({title:'附：本报告对应的送审材料',paragraphs:[...(input.image_file?[`图片文件：${input.image_file}`,'以下图片识别文字可能有遗漏，请与原图核对。',r.extracted_text||'无法可靠识别图片文字。']:[]),...(input.text?[input.image_file?'随图文案：'+input.text:input.text]:[])]});
   const executedAt=new Date(data.run.executed_at);
   if(!r.checks.some(c=>c.rule_id==='A-11'))sections.unshift({title:'检查范围提醒',paragraphs:['这是旧版报告，未包含新增的歧视与群体贬损检查。请重新提交材料后再使用。']});
@@ -304,3 +353,4 @@ async function init(){
 }
 function showCloudBudget(remaining){$('.action-info p').textContent=Number.isFinite(remaining)?`体验次数剩余 ${remaining} 次`:'检查会使用模型额度';}
 init();
+$('#return-editor').addEventListener('click',showEditor);

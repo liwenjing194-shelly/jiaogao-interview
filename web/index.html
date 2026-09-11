@@ -53,6 +53,7 @@
               <label class="checkbox-row"><input id="incomplete" type="checkbox"><span>这份材料有截断、遮挡或缺少页面</span></label>
             </fieldset>
           </form>
+          <section id="historical-material" class="historical-material" hidden aria-label="当时提交的材料"><p class="notice">这是本次历史检查的材料快照，当前编辑内容已保留。</p><div id="historical-source"></div><button id="return-editor" class="secondary-button" type="button">返回编辑材料</button></section>
         </section>
         <section class="panel result-panel" aria-labelledby="result-heading" aria-busy="false">
           <div class="panel-heading"><h2 id="result-heading"><span class="step">02</span>检查结果</h2><span id="result-label" class="subtle">等待提交</span></div>
@@ -88,7 +89,7 @@
         </div>
       </div>
     </section>
-    <section id="view-history" class="view" hidden><div class="page-heading"><h1>检查记录</h1><p>最近 30 份成功报告保存在当前浏览器，查看不消耗模型额度。</p><details><summary>保存范围与隐私</summary><p>重新登录后仍可查看；无痕模式、换设备或清除浏览器数据后不会保留。同一浏览器的其他使用者也可能看到这些记录，重要报告请另存 PDF。</p></details></div><div id="history-list" class="history-list"></div></section>
+    <section id="view-history" class="view" hidden><div class="page-heading"><h1>检查记录</h1><p>最近 30 份成功报告保存在当前浏览器，查看不消耗模型额度。</p><details><summary>保存范围与隐私</summary><p>新检查的图片也尝试保存在本浏览器，存储失败会提示；旧版未保存的原图无法恢复。无痕模式、换设备或清除浏览器数据后不会保留。同一浏览器的其他使用者也可能看到材料和记录，重要报告及原图请另存。</p></details></div><div id="history-list" class="history-list"></div></section>
     <section id="view-rules" class="view" hidden><div class="page-heading"><h1>规则说明</h1><p>共 11 条：A-01 至 A-10 为题目原文，A-11 为新增的歧视与群体贬损业务规则。</p></div><div class="rule-intro"><h2>检查范围</h2><p>“未发现风险”仅限本次材料与当前规则，不代表已获得发布许可。看不清或缺少证据时明确要求补充；用户提供的来源、授权和效果资料仍需人工核验真实性。</p><p>修改建议采用按规则设置的保守整改要求，不代填活动日期或证明资料。高、中、低、待确认是本项目的分级；所有发现的问题都需人工确认后处理。A-11 是业务初筛标准，不是对违法行为的认定。</p></div><div id="rules-list" class="rules-list"></div><p id="rules-version" class="report-note"></p></section>
   </main>
 <article id="management-print" aria-label="管理层决策报告"></article>
