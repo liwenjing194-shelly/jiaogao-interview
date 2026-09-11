@@ -52,6 +52,39 @@ def load_rules():
     return rules
 
 
+def contextual_optimizations(text, report):
+    """只对可核对的表达/排版特征给示例，不补写商业事实，也不改变风险结论。"""
+    if not report['input_complete']:
+        return []
+    findings = []
+    quotes = [i['original_text'] for c in report['checks'] for i in c['issues']]
+
+    def add(before, after, reason):
+        if before == after or len(findings) >= 2 or any(q and q in before for q in quotes):
+            return
+        if any(item['original_text'] == before for item in findings):
+            return
+        findings.append({'original_text': before, 'suggested_text': after, 'reason': reason})
+
+    paragraphs = [line.strip() for line in text.splitlines() if line.strip()]
+    for index, line in enumerate(paragraphs):
+        if index and line == paragraphs[index - 1] and 6 <= len(line) <= 240:
+            add(line + '\n' + line, line, '相邻两段文字完全重复，可保留一段，减少重复阅读。')
+        if not 6 <= len(line) <= 240:
+            continue
+        if re.search(r'([!！?？])\1{2,}', line):
+            add(line, re.sub(r'([!！?？])\1{2,}', r'\1', line), '这段有连续三个以上相同的感叹号或问号，可保留一个，让重点更清楚。')
+        specs = list(re.finditer(r'(?:颜色|顏色|材质|材質|容量|尺寸|重量|型号|型號)[：:]', line))
+        if len(specs) >= 3:
+            positions = {match.start() for match in specs[1:]}
+            after = ''.join(('\n' if pos in positions else '') + char for pos, char in enumerate(line))
+            add(line, after, '这一行包含多项已填写的商品规格，可按现有字段分行，方便逐项查找；数值和内容保持原样。')
+        elif len(line) >= 70 and len(re.findall(r'[。；;，]', line)) >= 3:
+            after = re.sub(r'(?<=[。；;，])(?=.)', '\n', line)
+            add(line, after, '这段较长且包含多个分句，可在现有标点处分行，减轻连续阅读负担；原文事实和标点不变。')
+    return findings
+
+
 def build_payload(text, image_path, evidence, incomplete, config, rules):
     if not text.strip() and image_path is None:
         raise CheckError("请提供非空文字或一张JPG/PNG图片。")
@@ -143,7 +176,7 @@ def validate_report(report, text, has_image, incomplete, rules):
     require(isinstance(report.get("limitations"), list) and all(isinstance(v, str) for v in report["limitations"]), "阅读限制格式错误")
     codes = report.get("optimization_codes", [])
     require(isinstance(codes, list) and len(codes) <= 2 and all(isinstance(code, str) and code in OPTIMIZATIONS for code in codes), "可选优化代码错误")
-    report["optimization_suggestions"] = [OPTIMIZATIONS[code] for code in dict.fromkeys(codes)]
+    # 兼容旧模型代码字段，但不再将代码映射成无关的通用建议。
     checks = report.get("checks")
     require(isinstance(checks, list) and len(checks) == len(rules["rules"]) and all(isinstance(c, dict) for c in checks), "必须检查当前规则集的全部规则")
     rule_map = {r["id"]: r for r in rules["rules"]}
@@ -218,6 +251,13 @@ def validate_report(report, text, has_image, incomplete, rules):
     report["image_note"] = "图片引用来自模型识别，尚未独立OCR核验，请对照原图。" if has_image else ""
     if not has_image:
         report["extracted_text"] = text
+    source = text + ('\n' + report['extracted_text'] if has_image else '')
+    details = contextual_optimizations(source, report)
+    report['optimization_version'] = 2
+    report['optimization_details'] = details
+    report['optimization_suggestions'] = [
+        f"原文：{item['original_text']}\n建议：{item['reason']}\n表达/排版示例：\n{item['suggested_text']}"
+        for item in details]
     return report
 
 
